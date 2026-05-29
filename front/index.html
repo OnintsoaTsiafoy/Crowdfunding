@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FundChain — Crowdfunding DApp</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <!-- ethers.js v5 épinglé : app.js utilise l'API v5 (ethers.providers, ethers.utils) -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-logo">◈</span>
+      <div class="brand-text">
+        <h1>FundChain</h1>
+        <p>Campagne de financement décentralisée</p>
+      </div>
+    </div>
+    <div class="wallet">
+      <span id="connectedAddress" class="wallet-addr" title="Adresse connectée">Non connecté</span>
+      <button id="connectButton" class="btn btn-primary">
+        <span class="dot"></span> Connecter MetaMask
+      </button>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- Sélection du contrat -->
+    <section class="card card-contract">
+      <label class="field-label" for="contractAddress">Adresse du contrat (Sepolia)</label>
+      <div class="contract-row">
+        <input id="contractAddress" type="text" placeholder="0x…" autocomplete="off" spellcheck="false" />
+        <button id="loadContractButton" class="btn btn-ghost">Charger</button>
+        <button id="refreshButton" class="btn btn-ghost" title="Actualiser les données">↻</button>
+      </div>
+    </section>
+
+    <!-- Tableau de bord de la campagne -->
+    <section class="grid">
+      <div class="card stat">
+        <span class="stat-label">Objectif</span>
+        <span id="goal" class="stat-value">—</span>
+      </div>
+      <div class="card stat">
+        <span class="stat-label">Montant collecté</span>
+        <span id="totalRaised" class="stat-value accent">—</span>
+      </div>
+      <div class="card stat">
+        <span class="stat-label">Échéance</span>
+        <span id="deadline" class="stat-value">—</span>
+      </div>
+      <div class="card stat">
+        <span class="stat-label">Statut</span>
+        <span id="status" class="badge">Inconnu</span>
+      </div>
+    </section>
+
+    <!-- Ma contribution -->
+    <section class="card card-mine">
+      <span class="stat-label">Ma contribution</span>
+      <span id="userContribution" class="stat-value">0 ETH</span>
+    </section>
+
+    <!-- Actions -->
+    <section class="card actions">
+      <h2 class="section-title">Participer à la campagne</h2>
+
+      <form class="contribute-form" onsubmit="return false;">
+        <div class="amount-input">
+          <input id="contributeAmount" type="number" min="0" step="0.0001" placeholder="0.0" />
+          <span class="unit">ETH</span>
+        </div>
+        <button id="contributeButton" class="btn btn-primary btn-lg" type="submit">Contribuer</button>
+      </form>
+
+      <div class="owner-actions">
+        <button id="withdrawButton" class="btn btn-success">Retirer les fonds (owner)</button>
+        <button id="refundButton" class="btn btn-warning">Se faire rembourser</button>
+      </div>
+    </section>
+
+    <!-- Messages / notifications -->
+    <section class="messages-wrap">
+      <h2 class="section-title muted">Journal</h2>
+      <div id="messageArea" class="messages"></div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <span>FundChain · DApp Crowdfunding · Réseau Sepolia</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

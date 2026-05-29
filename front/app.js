@@ -14,6 +14,20 @@ let contractAddress = '';
 const DEFAULT_ABI_PATH = '/build/contracts_Crowdfunding_sol_Crowdfunding.abi';
 let contractAbi = null;
 
+// RPC public Sepolia utilisé en lecture seule quand MetaMask n'est pas connecté
+const SEPOLIA_RPC = 'https://ethereum-sepolia-rpc.publicnode.com';
+
+let readProvider = null;
+function getReadProvider() {
+  if (provider) return provider;
+  if (!readProvider) {
+    readProvider = new ethers.providers.JsonRpcProvider(SEPOLIA_RPC);
+    // Pas de listeners HTTP en boucle : on désactive le polling automatique.
+    readProvider.pollingInterval = 60000;
+  }
+  return readProvider;
+}
+
 // IDs attendus dans le HTML (exemples) :
 // #connectButton, #connectedAddress, #contractAddress, #loadContractButton
 // #goal, #totalRaised, #deadline, #status, #userContribution
@@ -68,6 +82,7 @@ async function connectMetaMask() {
     const addrEl = document.getElementById('connectedAddress');
     if (addrEl) addrEl.textContent = address;
     logMessage('Connecté en tant que ' + address, 'success');
+    setActionsEnabled(true);
     // If contract address field exists, update
     const ca = document.getElementById('contractAddress');
     if (ca && ca.value) contractAddress = ca.value.trim();
@@ -75,6 +90,16 @@ async function connectMetaMask() {
   } catch (err) {
     logMessage('Connexion échouée: ' + err.message, 'error');
   }
+}
+
+function setActionsEnabled(enabled) {
+  const ids = ['contributeButton', 'withdrawButton', 'refundButton'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.disabled = !enabled;
+    el.title = enabled ? '' : 'Connectez MetaMask pour activer cette action';
+  });
 }
 
 async function loadAbiAndContract() {
@@ -91,7 +116,11 @@ async function loadAbiAndContract() {
     if (!contractAbi) return;
   }
   try {
-    contract = new ethers.Contract(contractAddress, contractAbi, signer || provider);
+    // Détache les listeners de l'instance précédente avant d'en créer une nouvelle.
+    if (contract) {
+      try { contract.removeAllListeners(); } catch (e) { /* ignore */ }
+    }
+    contract = new ethers.Contract(contractAddress, contractAbi, signer || getReadProvider());
     logMessage('Instance du contrat créée: ' + contractAddress, 'success');
     attachContractEvents();
     await refreshAll();
@@ -102,17 +131,19 @@ async function loadAbiAndContract() {
 
 function attachContractEvents() {
   if (!contract) return;
-  // Écoute des événements si présents
+  // On n'écoute les événements qu'avec MetaMask (Web3Provider).
+  // Le JsonRpcProvider public pollerait eth_getLogs en HTTP en boucle → saturation.
+  if (!signer) return;
   try {
-    contract.on('Contributed', (contributor, amount, event) => {
+    contract.on('Contributed', (contributor, amount) => {
       logMessage(`Contributed: ${contributor} • ${formatEther(amount)} ETH`, 'info');
       refreshAll();
     });
-    contract.on('Withdrawn', (receiver, amount, event) => {
+    contract.on('Withdrawn', (receiver, amount) => {
       logMessage(`Withdrawn: ${receiver} • ${formatEther(amount)} ETH`, 'info');
       refreshAll();
     });
-    contract.on('Refunded', (from, amount, event) => {
+    contract.on('Refunded', (from, amount) => {
       logMessage(`Refunded: ${from} • ${formatEther(amount)} ETH`, 'info');
       refreshAll();
     });
@@ -134,7 +165,9 @@ function formatTimestamp(ts) {
     const n = Number(ts);
     if (n === 0) return '—';
     const d = new Date(n * 1000);
-    return d.toLocaleString();
+    const date = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    return `${date} ${time}`;
   } catch (err) {
     return ts.toString();
   }
@@ -202,9 +235,19 @@ async function safeCall(fnName, ...args) {
   }
 }
 
+async function ensureSigner() {
+  if (signer) return true;
+  if (!window.ethereum) {
+    logMessage('MetaMask non détecté. Installez MetaMask et réessayez.', 'error');
+    return false;
+  }
+  await connectMetaMask();
+  return !!signer;
+}
+
 async function contribute(amountEth) {
-  if (!contract) return logMessage('Contrat non initialisé', 'error');
-  if (!signer) return logMessage('Connectez MetaMask d\'abord', 'error');
+  if (!(await ensureSigner())) return;
+  if (!contract) return logMessage('Chargez d\'abord l\'adresse du contrat', 'error');
   try {
     const val = ethers.utils.parseEther(amountEth.toString());
     const tx = await contract.connect(signer).contribute({ value: val });
@@ -218,8 +261,8 @@ async function contribute(amountEth) {
 }
 
 async function withdraw() {
-  if (!contract) return logMessage('Contrat non initialisé', 'error');
-  if (!signer) return logMessage('Connectez MetaMask d\'abord', 'error');
+  if (!(await ensureSigner())) return;
+  if (!contract) return logMessage('Chargez d\'abord l\'adresse du contrat', 'error');
   try {
     const tx = await contract.connect(signer).withdraw();
     logMessage('Withdrawal tx envoyée: ' + tx.hash, 'info');
@@ -232,8 +275,8 @@ async function withdraw() {
 }
 
 async function refund() {
-  if (!contract) return logMessage('Contrat non initialisé', 'error');
-  if (!signer) return logMessage('Connectez MetaMask d\'abord', 'error');
+  if (!(await ensureSigner())) return;
+  if (!contract) return logMessage('Chargez d\'abord l\'adresse du contrat', 'error');
   try {
     const tx = await contract.connect(signer).refund();
     logMessage('Refund tx envoyée: ' + tx.hash, 'info');
@@ -279,6 +322,9 @@ window.addEventListener('load', () => {
     logMessage('La librairie ethers.js est requise. Ajoutez <script src="https://cdn.jsdelivr.net/npm/ethers/dist/ethers.min.js"></script> dans votre HTML.', 'error');
   }
   setupUiListeners();
+  // Boutons d'action actifs dès que MetaMask est installé.
+  // Si l'utilisateur clique sans avoir connecté, ensureSigner() déclenchera la connexion.
+  setActionsEnabled(!!window.ethereum);
 });
 
 // Expose some helpers pour debug dans la console

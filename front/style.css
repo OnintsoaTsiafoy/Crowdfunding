@@ -1,0 +1,260 @@
+/* FundChain — styles (Membre 3)
+   Style clair et plat. Une seule couleur d'accent, bordures nettes,
+   pas de dégradés ni de flou. */
+
+:root {
+  --paper:   #f7f5ef;
+  --ink:     #1c1b19;
+  --ink-soft:#6b6960;
+  --line:    #ddd8cc;
+  --white:   #ffffff;
+  --green:   #1d7a4d;   /* accent principal */
+  --green-d: #155e3a;
+  --amber:   #b56a00;
+  --red:     #b02a1f;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  line-height: 1.55;
+  min-height: 100vh;
+}
+
+/* ---------- Barre du haut ---------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 18px clamp(16px, 5vw, 48px);
+  background: var(--white);
+  border-bottom: 2px solid var(--ink);
+}
+
+.brand { display: flex; align-items: center; gap: 12px; }
+
+.brand-logo {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  font-size: 20px;
+  color: var(--white);
+  background: var(--green);
+  border-radius: 6px;
+}
+
+.brand-text h1 { font-size: 1.25rem; font-weight: 700; }
+.brand-text p  { font-size: 0.8rem; color: var(--ink-soft); }
+
+.wallet { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.wallet-addr {
+  font-size: 0.8rem;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color: var(--ink-soft);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  padding: 7px 12px;
+  border-radius: 6px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Boutons ---------- */
+.btn {
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  padding: 10px 16px;
+  color: var(--ink);
+  background: var(--white);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.15s, color 0.15s;
+}
+.btn:hover  { background: var(--paper); }
+.btn:active { transform: translateY(1px); }
+.btn:disabled,
+.btn[disabled] {
+  cursor: not-allowed;
+  opacity: 0.5;
+  background: var(--paper);
+  color: var(--ink-soft);
+  border-color: var(--line);
+  transform: none;
+}
+
+.btn-primary { background: var(--green); border-color: var(--green-d); color: #fff; }
+.btn-primary:hover { background: var(--green-d); }
+
+.btn-ghost { border-color: var(--line); color: var(--ink-soft); }
+.btn-ghost:hover { border-color: var(--ink); color: var(--ink); }
+
+.btn-success { background: var(--green); border-color: var(--green-d); color: #fff; }
+.btn-success:hover { background: var(--green-d); }
+
+.btn-warning { background: #fff; border-color: var(--amber); color: var(--amber); }
+.btn-warning:hover { background: #fff6e9; }
+
+.btn-lg { padding: 12px 22px; }
+
+.dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+/* ---------- Conteneur ---------- */
+.container {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: clamp(20px, 4vw, 36px) clamp(16px, 5vw, 48px) 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ---------- Cartes ---------- */
+.card {
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.field-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+  margin-bottom: 9px;
+}
+
+.contract-row { display: flex; gap: 9px; flex-wrap: wrap; }
+.contract-row input { flex: 1 1 280px; }
+
+input[type="text"],
+input[type="number"] {
+  font: inherit;
+  color: var(--ink);
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 11px 14px;
+  outline: none;
+  width: 100%;
+}
+input::placeholder { color: #aaa597; }
+input:focus { border-color: var(--green); box-shadow: 0 0 0 2px rgba(29, 122, 77, 0.18); }
+
+/* ---------- Statistiques ---------- */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 14px;
+}
+
+.stat { display: flex; flex-direction: column; gap: 6px; }
+
+.stat-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+}
+
+.stat-value {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 1.4rem;
+  font-weight: 600;
+  word-break: break-word;
+}
+.stat-value.accent { color: var(--green); }
+
+.card-mine {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.card-mine .stat-value { font-size: 1.15rem; }
+
+.badge {
+  align-self: flex-start;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 6px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+
+/* ---------- Actions ---------- */
+.section-title { font-size: 1rem; font-weight: 700; margin-bottom: 14px; }
+.section-title.muted { color: var(--ink-soft); font-size: 0.85rem; font-weight: 600; }
+
+.contribute-form {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.amount-input { position: relative; flex: 1 1 220px; display: flex; align-items: center; }
+.amount-input input { padding-right: 52px; }
+.amount-input .unit {
+  position: absolute;
+  right: 14px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
+.owner-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.owner-actions .btn { flex: 1 1 200px; justify-content: center; }
+
+/* ---------- Journal / messages ---------- */
+.messages-wrap { display: flex; flex-direction: column; gap: 9px; }
+.messages { display: flex; flex-direction: column; gap: 7px; }
+
+.msg {
+  font-size: 0.88rem;
+  padding: 11px 14px;
+  border-radius: 6px;
+  border-left: 4px solid var(--ink-soft);
+  background: var(--white);
+  border: 1px solid var(--line);
+  word-break: break-word;
+}
+.msg.info    { border-left-color: var(--green); }
+.msg.success { border-left-color: var(--green); background: #f1f8f3; }
+.msg.error   { border-left-color: var(--red); background: #fbf0ef; color: #7a1d15; }
+
+/* ---------- Pied de page ---------- */
+.footer {
+  text-align: center;
+  padding: 22px;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  border-top: 1px solid var(--line);
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 560px) {
+  .topbar { flex-direction: column; align-items: flex-start; }
+  .wallet { width: 100%; justify-content: space-between; }
+  .wallet-addr { max-width: none; flex: 1; }
+  .owner-actions .btn,
+  .contribute-form .btn { width: 100%; }
+}
