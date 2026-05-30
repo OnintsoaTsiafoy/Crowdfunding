@@ -1,35 +1,40 @@
-// front/app.js
-// Implémentation pour le membre 4 — connexion avec ethers.js
-// Attendu : un fichier HTML avec des éléments portant les ids utilisés ci-dessous
-
-// Usage :
-// - Fournir l'adresse du contrat dans l'input #contractAddress ou modifier la variable par défaut
-// - Cliquer "Connect" pour connecter MetaMask
-// - Utiliser les boutons/formulaires pour contribute/withdraw/refund
+// front/app.js — connexion MetaMask via ethers.js v5
 
 let provider, signer, contract;
 let contractAddress = '';
+let currentUserAddress = null;
 
-// Par défaut on tente de récupérer l'ABI depuis /build/... (peut être adapté)
-const DEFAULT_ABI_PATH = '/build/contracts_Crowdfunding_sol_Crowdfunding.abi';
-let contractAbi = null;
+// ABI embarqué directement (extrait du build)
+const CONTRACT_ABI = [
+  {"inputs":[{"internalType":"uint256","name":"_goal","type":"uint256"},{"internalType":"uint256","name":"_durationInDays","type":"uint256"}],"stateMutability":"nonpayable","type":"constructor"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"contributor","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"Contributed","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"contributor","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"Refunded","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"recipient","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"Withdrawn","type":"event"},
+  {"inputs":[],"name":"contribute","outputs":[],"stateMutability":"payable","type":"function"},
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"contributions","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"deadline","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"getCampaignInfo","outputs":[{"internalType":"address","name":"campaignOwner","type":"address"},{"internalType":"uint256","name":"campaignGoal","type":"uint256"},{"internalType":"uint256","name":"campaignDeadline","type":"uint256"},{"internalType":"uint256","name":"raised","type":"uint256"},{"internalType":"uint256","name":"contractBalance","type":"uint256"},{"internalType":"bool","name":"goalReached","type":"bool"},{"internalType":"bool","name":"campaignEnded","type":"bool"},{"internalType":"bool","name":"fundsWithdrawn","type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"goal","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"refund","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[],"name":"totalRaised","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"withdraw","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[],"name":"withdrawn","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"}
+];
 
-// IDs attendus dans le HTML (exemples) :
-// #connectButton, #connectedAddress, #contractAddress, #loadContractButton
-// #goal, #totalRaised, #deadline, #status, #userContribution
-// #contributeAmount, #contributeButton, #withdrawButton, #refundButton
-// #messageArea, #refreshButton
+// ─── Messages ─────────────────────────────────────────────────────────────────
 
 function logMessage(msg, type = 'info') {
+  console[type === 'error' ? 'error' : 'log']('[app] ' + msg);
   const el = document.getElementById('messageArea');
-  if (!el) {
-    console[type === 'error' ? 'error' : 'log']('[app] ' + msg);
-    return;
-  }
-  const p = document.createElement('div');
-  p.textContent = msg;
-  p.className = 'msg ' + type;
-  el.prepend(p);
+  if (!el) return;
+  // Rendre la carte logs visible dès le premier message
+  const card = document.getElementById('logsCard');
+  if (card) card.style.display = '';
+  const div = document.createElement('div');
+  div.textContent = msg;
+  div.className = 'msg ' + type;
+  el.prepend(div);
 }
 
 function clearMessages() {
@@ -37,23 +42,7 @@ function clearMessages() {
   if (el) el.innerHTML = '';
 }
 
-async function fetchAbi(path = DEFAULT_ABI_PATH) {
-  try {
-    const res = await fetch(path, {cache: 'no-store'});
-    if (!res.ok) throw new Error('ABI fetch failed: ' + res.status);
-    const text = await res.text();
-    // ABI file may be plain JSON or already stringified array
-    try {
-      return JSON.parse(text);
-    } catch (err) {
-      // if not JSON, assume it's already an ABI array in string format
-      return JSON.parse(text);
-    }
-  } catch (err) {
-    logMessage('Impossible de charger l\'ABI depuis ' + path + ' — ' + err.message, 'error');
-    return null;
-  }
-}
+// ─── Connexion MetaMask ────────────────────────────────────────────────────────
 
 async function connectMetaMask() {
   if (!window.ethereum) {
@@ -64,230 +53,363 @@ async function connectMetaMask() {
     await window.ethereum.request({ method: 'eth_requestAccounts' });
     provider = new ethers.providers.Web3Provider(window.ethereum);
     signer = provider.getSigner();
-    const address = await signer.getAddress();
+    currentUserAddress = await signer.getAddress();
+
     const addrEl = document.getElementById('connectedAddress');
-    if (addrEl) addrEl.textContent = address;
-    logMessage('Connecté en tant que ' + address, 'success');
-    // If contract address field exists, update
+    if (addrEl) addrEl.textContent = currentUserAddress;
+
+    const connectBtn = document.getElementById('connectButton');
+    if (connectBtn) {
+      connectBtn.textContent = 'Connecté';
+      connectBtn.disabled = true;
+    }
+
+    logMessage('Connecté : ' + currentUserAddress, 'success');
+
     const ca = document.getElementById('contractAddress');
-    if (ca && ca.value) contractAddress = ca.value.trim();
-    await loadAbiAndContract();
+    if (ca && ca.value.trim()) {
+      contractAddress = ca.value.trim();
+      await initContract();
+    }
   } catch (err) {
-    logMessage('Connexion échouée: ' + err.message, 'error');
+    logMessage('Connexion échouée : ' + err.message, 'error');
   }
 }
 
-async function loadAbiAndContract() {
+// ─── Chargement du contrat ─────────────────────────────────────────────────────
+
+async function initContract() {
+  const ca = document.getElementById('contractAddress');
+  if (ca && ca.value.trim()) contractAddress = ca.value.trim();
+
   if (!contractAddress) {
-    const ca = document.getElementById('contractAddress');
-    if (ca) contractAddress = ca.value.trim();
-  }
-  if (!contractAddress) {
-    logMessage('Adresse du contrat non fournie. Saisissez-la dans #contractAddress.', 'error');
+    alert('Saisissez l\'adresse du contrat déployé.');
     return;
   }
-  if (!contractAbi) {
-    contractAbi = await fetchAbi();
-    if (!contractAbi) return;
+
+  // Si MetaMask n'est pas encore connecté, on crée un provider en lecture seule
+  if (!provider) {
+    if (window.ethereum) {
+      provider = new ethers.providers.Web3Provider(window.ethereum);
+    } else {
+      alert('MetaMask non détecté. Installez MetaMask pour interagir avec le contrat.');
+      return;
+    }
   }
+
+  // S'assurer qu'on est sur Sepolia
+  const switched = await switchToSepolia();
+  if (!switched) return;
+  // Recréer le provider après le changement de réseau
+  provider = new ethers.providers.Web3Provider(window.ethereum);
+  if (signer) signer = provider.getSigner();
+
   try {
-    contract = new ethers.Contract(contractAddress, contractAbi, signer || provider);
-    logMessage('Instance du contrat créée: ' + contractAddress, 'success');
+    await showNetwork();
+    contract = new ethers.Contract(contractAddress, CONTRACT_ABI, signer || provider);
+    logMessage('Contrat chargé : ' + contractAddress, 'success');
     attachContractEvents();
     await refreshAll();
   } catch (err) {
-    logMessage('Erreur création instance contrat: ' + err.message, 'error');
+    logMessage('Erreur initialisation contrat : ' + err.message, 'error');
+    alert('Erreur : ' + err.message);
   }
 }
+
+// ─── Écoute des événements ─────────────────────────────────────────────────────
 
 function attachContractEvents() {
   if (!contract) return;
-  // Écoute des événements si présents
   try {
-    contract.on('Contributed', (contributor, amount, event) => {
-      logMessage(`Contributed: ${contributor} • ${formatEther(amount)} ETH`, 'info');
+    contract.removeAllListeners();
+    contract.on('Contributed', (contributor, amount) => {
+      logMessage('Contributed : ' + contributor + ' — ' + fmt(amount) + ' ETH', 'info');
       refreshAll();
     });
-    contract.on('Withdrawn', (receiver, amount, event) => {
-      logMessage(`Withdrawn: ${receiver} • ${formatEther(amount)} ETH`, 'info');
+    contract.on('Withdrawn', (recipient, amount) => {
+      logMessage('Withdrawn : ' + recipient + ' — ' + fmt(amount) + ' ETH', 'info');
       refreshAll();
     });
-    contract.on('Refunded', (from, amount, event) => {
-      logMessage(`Refunded: ${from} • ${formatEther(amount)} ETH`, 'info');
+    contract.on('Refunded', (contributor, amount) => {
+      logMessage('Refunded : ' + contributor + ' — ' + fmt(amount) + ' ETH', 'info');
       refreshAll();
     });
+  } catch (_) {}
+}
+
+// ─── Réseau ───────────────────────────────────────────────────────────────────
+
+const SEPOLIA_CHAIN_ID = '0xaa36a7'; // 11155111
+
+async function switchToSepolia() {
+  if (!window.ethereum) {
+    alert('MetaMask non détecté.');
+    return false;
+  }
+  try {
+    await window.ethereum.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: SEPOLIA_CHAIN_ID }],
+    });
+    return true;
   } catch (err) {
-    // Certains contracts peuvent ne pas exposer ces événements — ok
+    // Le réseau n'est pas encore ajouté dans MetaMask → on l'ajoute
+    if (err.code === 4902) {
+      try {
+        await window.ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: SEPOLIA_CHAIN_ID,
+            chainName: 'Sepolia Testnet',
+            nativeCurrency: { name: 'SepoliaETH', symbol: 'ETH', decimals: 18 },
+            rpcUrls: ['https://rpc.sepolia.org'],
+            blockExplorerUrls: ['https://sepolia.etherscan.io'],
+          }],
+        });
+        return true;
+      } catch (addErr) {
+        logMessage('Impossible d\'ajouter Sepolia : ' + addErr.message, 'error');
+        return false;
+      }
+    }
+    logMessage('Changement de réseau annulé.', 'error');
+    return false;
   }
 }
 
-function formatEther(bn) {
+async function showNetwork() {
+  if (!provider) return;
   try {
-    return ethers.utils.formatEther(bn);
-  } catch (err) {
-    return bn.toString();
-  }
+    const network = await provider.getNetwork();
+    const names = {
+      1:        'Mainnet',
+      11155111: 'Sepolia ✓',
+      5:        'Goerli',
+      137:      'Polygon',
+      80001:    'Mumbai',
+      1337:     'Localhost',
+      31337:    'Hardhat',
+    };
+    const name = names[network.chainId] || network.name || ('Chain ' + network.chainId);
+    setText('networkName', name);
+    setText('chainId', String(network.chainId));
+    // Avertissement si pas sur Sepolia
+    const el = document.getElementById('networkName');
+    if (el) el.style.color = network.chainId === 11155111 ? '#22c55e' : '#ef4444';
+  } catch (_) {}
 }
 
-function formatTimestamp(ts) {
-  try {
-    const n = Number(ts);
-    if (n === 0) return '—';
-    const d = new Date(n * 1000);
-    return d.toLocaleString();
-  } catch (err) {
-    return ts.toString();
-  }
-}
-
-async function readContractValue(name, ...args) {
-  if (!contract) throw new Error('Contrat non initialisé');
-  if (typeof contract[name] !== 'function') throw new Error('Méthode ' + name + ' introuvable dans le contrat');
-  return await contract[name](...args);
-}
+// ─── Lecture de l'état ─────────────────────────────────────────────────────────
 
 async function refreshAll() {
-  clearMessages();
   if (!contract) return;
   try {
-    // lecture courante
-    let goal = await safeCall('goal');
-    let deadline = await safeCall('deadline');
-    let totalRaised = await safeCall('totalRaised');
-    // contribution de l'utilisateur
-    let userAddr = signer ? await signer.getAddress() : null;
-    let userContribution = null;
-    if (userAddr) {
-      userContribution = await safeCall('contributions', userAddr);
-      if (userContribution === null) {
-        // try alternate name
-        userContribution = await safeCall('contributionOf', userAddr);
+    const info = await contract.getCampaignInfo();
+    const {
+      campaignOwner,
+      campaignGoal,
+      campaignDeadline,
+      raised,
+      contractBalance,
+      goalReached,
+      campaignEnded,
+    } = info;
+
+    setText('goal',           fmt(campaignGoal) + ' ETH');
+    setText('totalRaised',    fmt(raised) + ' ETH');
+    setText('contractBalance',fmt(contractBalance) + ' ETH');
+    setText('deadline',       fmtDate(campaignDeadline));
+
+    // Statut
+    const statusEl = document.getElementById('status');
+    if (statusEl) {
+      if (goalReached) {
+        statusEl.textContent = 'Objectif atteint ✓';
+        statusEl.style.color = '#22c55e';
+      } else if (!campaignEnded) {
+        statusEl.textContent = 'En cours';
+        statusEl.style.color = '#f97316';
+      } else {
+        statusEl.textContent = 'Terminé (objectif non atteint)';
+        statusEl.style.color = '#ef4444';
       }
     }
 
-    // afficher
-    const elGoal = document.getElementById('goal');
-    if (elGoal) elGoal.textContent = goal ? formatEther(goal) + ' ETH' : '—';
-    const elTotal = document.getElementById('totalRaised');
-    if (elTotal) elTotal.textContent = totalRaised ? formatEther(totalRaised) + ' ETH' : '—';
-    const elDeadline = document.getElementById('deadline');
-    if (elDeadline) elDeadline.textContent = deadline ? formatTimestamp(deadline) : '—';
-    const elUser = document.getElementById('userContribution');
-    if (elUser) elUser.textContent = userContribution ? formatEther(userContribution) + ' ETH' : '0 ETH';
+    // Barre de progression
+    const goalWei = campaignGoal.gt(0) ? campaignGoal : ethers.BigNumber.from(1);
+    const pct = Math.min(100, Math.floor(raised.mul(100).div(goalWei).toNumber()));
+    const fill = document.getElementById('progressBarFill');
+    if (fill) fill.style.width = pct + '%';
+    setText('progressLabel', pct + '%');
 
-    // statut basique
-    const elStatus = document.getElementById('status');
-    if (elStatus) {
-      const now = Math.floor(Date.now() / 1000);
-      let status = 'Inconnu';
-      if (deadline) {
-        if (Number(totalRaised || 0) >= Number(goal || 0)) status = 'Objectif atteint';
-        else if (now < Number(deadline)) status = 'En cours';
-        else status = 'Terminé (objectif non atteint)';
+    // Contribution de l'utilisateur courant
+    if (currentUserAddress && contract) {
+      try {
+        const userContrib = await contract.contributions(currentUserAddress);
+        setText('userContribution', fmt(userContrib) + ' ETH');
+      } catch (_) {
+        setText('userContribution', '0 ETH');
       }
-      elStatus.textContent = status;
+    }
+
+    // Badge propriétaire
+    const ownerBadge = document.getElementById('ownerBadge');
+    if (ownerBadge && currentUserAddress) {
+      const isOwner = campaignOwner.toLowerCase() === currentUserAddress.toLowerCase();
+      ownerBadge.style.display = isOwner ? 'block' : 'none';
     }
   } catch (err) {
-    logMessage('Erreur lecture contrat: ' + err.message, 'error');
+    if (err.code === 'CALL_EXCEPTION') {
+      logMessage('Contrat introuvable sur ce réseau. Vérifiez le réseau dans MetaMask et l\'adresse du contrat.', 'error');
+    } else {
+      logMessage('Erreur lecture contrat : ' + err.message, 'error');
+    }
   }
 }
 
-async function safeCall(fnName, ...args) {
-  try {
-    if (!contract) return null;
-    if (typeof contract[fnName] !== 'function') return null;
-    return await contract[fnName](...args);
-  } catch (err) {
-    return null;
-  }
-}
+// ─── Actions ──────────────────────────────────────────────────────────────────
 
 async function contribute(amountEth) {
-  if (!contract) return logMessage('Contrat non initialisé', 'error');
-  if (!signer) return logMessage('Connectez MetaMask d\'abord', 'error');
+  if (!contract) return logMessage('Contrat non initialisé.', 'error');
+  if (!signer)   return logMessage('Connectez MetaMask d\'abord.', 'error');
   try {
-    const val = ethers.utils.parseEther(amountEth.toString());
-    const tx = await contract.connect(signer).contribute({ value: val });
-    logMessage('Transaction envoyée: ' + tx.hash, 'info');
+    const val = ethers.utils.parseEther(String(amountEth));
+    const tx  = await contract.connect(signer).contribute({ value: val });
+    logMessage('Transaction envoyée : ' + tx.hash, 'info');
     await tx.wait();
-    logMessage('Contribution confirmée', 'success');
+    logMessage('Contribution confirmée !', 'success');
     await refreshAll();
   } catch (err) {
-    logMessage('Contribution échouée: ' + (err.data?.message || err.message), 'error');
+    logMessage('Contribution échouée : ' + extractError(err), 'error');
   }
 }
 
 async function withdraw() {
-  if (!contract) return logMessage('Contrat non initialisé', 'error');
-  if (!signer) return logMessage('Connectez MetaMask d\'abord', 'error');
+  if (!contract) return logMessage('Contrat non initialisé.', 'error');
+  if (!signer)   return logMessage('Connectez MetaMask d\'abord.', 'error');
   try {
     const tx = await contract.connect(signer).withdraw();
-    logMessage('Withdrawal tx envoyée: ' + tx.hash, 'info');
+    logMessage('Withdraw tx envoyée : ' + tx.hash, 'info');
     await tx.wait();
-    logMessage('Withdrawal confirmé', 'success');
+    logMessage('Withdraw confirmé !', 'success');
     await refreshAll();
   } catch (err) {
-    logMessage('Withdraw échoué: ' + (err.data?.message || err.message), 'error');
+    logMessage('Withdraw échoué : ' + extractError(err), 'error');
   }
 }
 
 async function refund() {
-  if (!contract) return logMessage('Contrat non initialisé', 'error');
-  if (!signer) return logMessage('Connectez MetaMask d\'abord', 'error');
+  if (!contract) return logMessage('Contrat non initialisé.', 'error');
+  if (!signer)   return logMessage('Connectez MetaMask d\'abord.', 'error');
   try {
     const tx = await contract.connect(signer).refund();
-    logMessage('Refund tx envoyée: ' + tx.hash, 'info');
+    logMessage('Refund tx envoyée : ' + tx.hash, 'info');
     await tx.wait();
-    logMessage('Refund confirmé', 'success');
+    logMessage('Refund confirmé !', 'success');
     await refreshAll();
   } catch (err) {
-    logMessage('Refund échoué: ' + (err.data?.message || err.message), 'error');
+    logMessage('Refund échoué : ' + extractError(err), 'error');
   }
 }
+
+// ─── Utilitaires ──────────────────────────────────────────────────────────────
+
+function fmt(bn) {
+  try { return ethers.utils.formatEther(bn); } catch (_) { return String(bn); }
+}
+
+function fmtDate(ts) {
+  try {
+    const n = Number(ts);
+    if (n === 0) return '—';
+    return new Date(n * 1000).toLocaleString();
+  } catch (_) { return String(ts); }
+}
+
+function setText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+function extractError(err) {
+  return err?.data?.message || err?.reason || err?.message || String(err);
+}
+
+// ─── Listeners UI ─────────────────────────────────────────────────────────────
 
 function setupUiListeners() {
-  const connectBtn = document.getElementById('connectButton');
-  if (connectBtn) connectBtn.addEventListener('click', connectMetaMask);
-  const loadBtn = document.getElementById('loadContractButton');
-  if (loadBtn) loadBtn.addEventListener('click', async () => {
-    const ca = document.getElementById('contractAddress');
-    if (ca) contractAddress = ca.value.trim();
-    await loadAbiAndContract();
-  });
+  document.getElementById('connectButton')
+    ?.addEventListener('click', connectMetaMask);
 
-  const refreshBtn = document.getElementById('refreshButton');
-  if (refreshBtn) refreshBtn.addEventListener('click', refreshAll);
+  document.getElementById('switchSepoliaButton')
+    ?.addEventListener('click', async () => {
+      await switchToSepolia();
+      if (provider) {
+        provider = new ethers.providers.Web3Provider(window.ethereum);
+        if (signer) signer = provider.getSigner();
+        await showNetwork();
+      }
+    });
 
-  const contributeBtn = document.getElementById('contributeButton');
-  if (contributeBtn) contributeBtn.addEventListener('click', async (e) => {
-    e.preventDefault();
-    const a = document.getElementById('contributeAmount');
-    if (!a || !a.value) return logMessage('Saisissez un montant', 'error');
-    await contribute(a.value);
-  });
+  document.getElementById('loadContractButton')
+    ?.addEventListener('click', initContract);
 
-  const withdrawBtn = document.getElementById('withdrawButton');
-  if (withdrawBtn) withdrawBtn.addEventListener('click', async () => await withdraw());
+  document.getElementById('refreshButton')
+    ?.addEventListener('click', refreshAll);
 
-  const refundBtn = document.getElementById('refundButton');
-  if (refundBtn) refundBtn.addEventListener('click', async () => await refund());
+  document.getElementById('contributeButton')
+    ?.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const a = document.getElementById('contributeAmount');
+      if (!a || !a.value) return logMessage('Saisissez un montant.', 'error');
+      await contribute(a.value);
+    });
+
+  document.getElementById('withdrawButton')
+    ?.addEventListener('click', withdraw);
+
+  document.getElementById('refundButton')
+    ?.addEventListener('click', refund);
 }
 
+// ─── Changement de compte / réseau MetaMask ────────────────────────────────────
+
+function listenMetaMaskChanges() {
+  if (!window.ethereum) return;
+
+  window.ethereum.on('accountsChanged', async (accounts) => {
+    if (accounts.length === 0) {
+      currentUserAddress = null;
+      setText('connectedAddress', 'Non connecté');
+      const btn = document.getElementById('connectButton');
+      if (btn) { btn.textContent = 'Connecter MetaMask'; btn.disabled = false; }
+      logMessage('MetaMask déconnecté.', 'error');
+    } else {
+      currentUserAddress = accounts[0];
+      setText('connectedAddress', currentUserAddress);
+      provider = new ethers.providers.Web3Provider(window.ethereum);
+      signer   = provider.getSigner();
+      logMessage('Compte changé : ' + currentUserAddress, 'info');
+      if (contract) await refreshAll();
+    }
+  });
+
+  window.ethereum.on('chainChanged', () => {
+    logMessage('Réseau changé — rechargement…', 'info');
+    window.location.reload();
+  });
+}
+
+// ─── Init ──────────────────────────────────────────────────────────────────────
+
 window.addEventListener('load', () => {
-  // Vérifier si ethers est présent
   if (typeof ethers === 'undefined') {
-    logMessage('La librairie ethers.js est requise. Ajoutez <script src="https://cdn.jsdelivr.net/npm/ethers/dist/ethers.min.js"></script> dans votre HTML.', 'error');
+    logMessage('ethers.js introuvable. Vérifiez votre connexion internet.', 'error');
+    return;
   }
   setupUiListeners();
+  listenMetaMaskChanges();
 });
 
-// Expose some helpers pour debug dans la console
-window.app = {
-  connectMetaMask,
-  loadAbiAndContract,
-  refreshAll,
-  contribute,
-  withdraw,
-  refund,
-};
-
+// Helpers accessibles depuis la console du navigateur
+window.app = { connectMetaMask, initContract, refreshAll, contribute, withdraw, refund };
